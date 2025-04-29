@@ -55,7 +55,6 @@
   }
 )
 
-
 (define-map game-admin-whitelist principal bool)
 
 ;; Read-only Validation Functions
@@ -234,3 +233,90 @@
     (ok true)
   )
 )
+
+;; Reward Distribution Functions
+
+;; Distribute Bitcoin rewards to qualifying players
+(define-public (distribute-bitcoin-rewards)
+  (let 
+    (
+      (top-players (get-top-players))
+    )
+    (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+    
+    (try! 
+      (fold distribute-reward 
+        (filter is-valid-reward-candidate top-players) 
+        (ok true)
+      )
+    )
+    
+    (ok true)
+  )
+)
+
+;; Validate reward candidate eligibility
+(define-private (is-valid-reward-candidate (player principal))
+  (match (map-get? leaderboard { player: player })
+    stats (and 
+            (> (get score stats) u0)
+            (is-safe-principal player)
+          )
+    false
+  )
+)
+
+;; Distribute individual reward based on score
+(define-private (distribute-reward 
+  (player principal) 
+  (previous-result (response bool uint))
+)
+  (match (map-get? leaderboard { player: player })
+    player-stats 
+      (let 
+        (
+          (reward-amount (calculate-reward (get score player-stats)))
+        )
+        (if (and (is-ok previous-result) (> reward-amount u0))
+          (begin
+            (map-set leaderboard 
+              { player: player }
+              (merge player-stats 
+                { total-rewards: (+ (get total-rewards player-stats) reward-amount) }
+              )
+            )
+            (ok true)
+          )
+          previous-result
+        )
+      )
+    previous-result
+  )
+)
+
+;; Calculate reward amount based on player score
+(define-private (calculate-reward (score uint))
+  (if (and (> score u100) (<= score u10000))
+    (* score u10)
+    u0
+  )
+)
+
+;; Leaderboard Functions
+
+;; Get top players for leaderboard (placeholder implementation)
+(define-read-only (get-top-players)
+  (let 
+    (
+      (max-entries (var-get max-leaderboard-entries))
+    )
+    (list 
+      tx-sender
+    )
+  )
+)
+
+;; Initialization
+
+;; Initial setup - first admin is contract deployer
+(map-set game-admin-whitelist tx-sender true)
