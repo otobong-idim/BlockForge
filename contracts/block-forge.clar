@@ -117,3 +117,57 @@
     (ok true)
   )
 )
+
+;; NFT Management Functions
+
+;; Mint new game asset NFT with metadata
+(define-public (mint-game-asset 
+  (name (string-ascii 50))
+  (description (string-ascii 200))
+  (rarity (string-ascii 20))
+  (power-level uint)
+)
+  (let 
+    (
+      (token-id (+ (var-get total-game-assets) u1))
+    )
+    (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+    (asserts! (is-valid-string name) ERR-INVALID-INPUT)
+    (asserts! (is-valid-string description) ERR-INVALID-INPUT)
+    (asserts! (is-valid-string rarity) ERR-INVALID-INPUT)
+    (asserts! (and (>= power-level u0) (<= power-level u1000)) ERR-INVALID-INPUT)
+    
+    (try! (nft-mint? game-asset token-id tx-sender))
+    
+    (map-set game-asset-metadata 
+      { token-id: token-id }
+      {
+        name: name,
+        description: description, 
+        rarity: rarity,
+        power-level: power-level
+      }
+    )
+    
+    (var-set total-game-assets token-id)
+    
+    (ok token-id)
+  )
+)
+
+;; Transfer game asset between players
+(define-public (transfer-game-asset 
+  (token-id uint) 
+  (recipient principal)
+)
+  (begin
+    (asserts! 
+      (is-eq tx-sender (unwrap! (nft-get-owner? game-asset token-id) ERR-INVALID-GAME-ASSET))
+      ERR-NOT-AUTHORIZED
+    )
+    
+    (asserts! (is-safe-principal recipient) ERR-INVALID-INPUT)
+    
+    (nft-transfer? game-asset token-id tx-sender recipient)
+  )
+)
