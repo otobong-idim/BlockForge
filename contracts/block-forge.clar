@@ -54,3 +54,66 @@
     total-rewards: uint 
   }
 )
+
+
+(define-map game-admin-whitelist principal bool)
+
+;; Read-only Validation Functions
+
+;; Check if sender is a game admin
+(define-read-only (is-game-admin (sender principal))
+  (default-to false (map-get? game-admin-whitelist sender))
+)
+
+;; Validate input string
+(define-read-only (is-valid-string (input (string-ascii 200)))
+  (> (len input) u0)
+)
+
+;; Validate principal
+(define-read-only (is-valid-principal (input principal))
+  (and 
+    (not (is-eq input tx-sender))
+    (not (is-eq input (as-contract tx-sender)))
+  )
+)
+
+;; Enhanced principal validation for security
+(define-read-only (is-safe-principal (input principal))
+  (and 
+    (is-valid-principal input)
+    (or 
+      (is-game-admin input)
+      (is-some (map-get? leaderboard { player: input }))
+    )
+  )
+)
+
+;; Administrative Functions
+
+;; Add game administrator with access controls
+(define-public (add-game-admin (new-admin principal))
+  (begin
+    (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+    (asserts! (is-safe-principal new-admin) ERR-INVALID-INPUT)
+    (map-set game-admin-whitelist new-admin true)
+    (ok true)
+  )
+)
+
+;; Initialize game configuration
+(define-public (initialize-game 
+  (entry-fee uint) 
+  (max-entries uint)
+)
+  (begin
+    (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+    (asserts! (and (>= entry-fee u1) (<= entry-fee u1000)) ERR-INVALID-FEE)
+    (asserts! (and (>= max-entries u1) (<= max-entries u500)) ERR-INVALID-ENTRIES)
+    
+    (var-set game-fee entry-fee)
+    (var-set max-leaderboard-entries max-entries)
+    
+    (ok true)
+  )
+)
