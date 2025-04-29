@@ -171,3 +171,66 @@
     (nft-transfer? game-asset token-id tx-sender recipient)
   )
 )
+
+;; Player Management Functions
+
+;; Player registration with entry fee
+(define-public (register-player)
+  (let 
+    (
+      (registration-fee (var-get game-fee))
+    )
+    (asserts! 
+      (>= (stx-get-balance tx-sender) registration-fee) 
+      ERR-INSUFFICIENT-FUNDS
+    )
+    
+    (asserts! 
+      (is-none (map-get? leaderboard { player: tx-sender }))
+      ERR-ALREADY-REGISTERED
+    )
+    
+    (try! (stx-transfer? registration-fee tx-sender (as-contract tx-sender)))
+    
+    (map-set leaderboard 
+      { player: tx-sender }
+      {
+        score: u0,
+        games-played: u0,
+        total-rewards: u0
+      }
+    )
+    
+    (ok true)
+  )
+)
+
+;; Update player score by authorized admins
+(define-public (update-player-score 
+  (player principal) 
+  (new-score uint)
+)
+  (let 
+    (
+      (current-stats (unwrap! 
+        (map-get? leaderboard { player: player }) 
+        ERR-PLAYER-NOT-FOUND
+      ))
+    )
+    (asserts! (is-game-admin tx-sender) ERR-NOT-AUTHORIZED)
+    (asserts! (is-safe-principal player) ERR-INVALID-INPUT)
+    (asserts! (and (>= new-score u0) (<= new-score u10000)) ERR-INVALID-SCORE)
+    
+    (map-set leaderboard 
+      { player: player }
+      (merge current-stats 
+        {
+          score: new-score,
+          games-played: (+ (get games-played current-stats) u1)
+        }
+      )
+    )
+    
+    (ok true)
+  )
+)
